@@ -23,6 +23,11 @@
 		A1000051000000000000001 /* SignatureEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000052000000000000001 /* SignatureEditorView.swift */; };
 		A1000053000000000000001 /* SignaturePreviewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000054000000000000001 /* SignaturePreviewContainer.swift */; };
 		A1000055000000000000001 /* SyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000056000000000000001 /* SyncSettingsView.swift */; };
+		A1000057000000000000001 /* SignatureListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000058000000000000001 /* SignatureListViewModel.swift */; };
+		A1000059000000000000001 /* SignatureEditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000060000000000000001 /* SignatureEditorViewModel.swift */; };
+		A1000061000000000000001 /* SyncViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000062000000000000001 /* SyncViewModel.swift */; };
+		A1000063000000000000001 /* MailSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000064000000000000001 /* MailSyncService.swift */; };
+		A1000065000000000000001 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000066000000000000001 /* KeychainService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,6 +50,11 @@
 		A1000052000000000000001 /* SignatureEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignatureEditorView.swift; sourceTree = "<group>"; };
 		A1000054000000000000001 /* SignaturePreviewContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignaturePreviewContainer.swift; sourceTree = "<group>"; };
 		A1000056000000000000001 /* SyncSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncSettingsView.swift; sourceTree = "<group>"; };
+		A1000058000000000000001 /* SignatureListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignatureListViewModel.swift; sourceTree = "<group>"; };
+		A1000060000000000000001 /* SignatureEditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignatureEditorViewModel.swift; sourceTree = "<group>"; };
+		A1000062000000000000001 /* SyncViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncViewModel.swift; sourceTree = "<group>"; };
+		A1000064000000000000001 /* MailSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailSyncService.swift; sourceTree = "<group>"; };
+		A1000066000000000000001 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -113,6 +123,8 @@
 			children = (
 				A1000046000000000000001 /* SignatureStorageService.swift */,
 				A1000048000000000000001 /* HTMLValidationService.swift */,
+				A1000064000000000000001 /* MailSyncService.swift */,
+				A1000066000000000000001 /* KeychainService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -120,6 +132,9 @@
 		A1000020000000000000001 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
+				A1000058000000000000001 /* SignatureListViewModel.swift */,
+				A1000060000000000000001 /* SignatureEditorViewModel.swift */,
+				A1000062000000000000001 /* SyncViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -247,6 +262,11 @@
 				A1000051000000000000001 /* SignatureEditorView.swift in Sources */,
 				A1000053000000000000001 /* SignaturePreviewContainer.swift in Sources */,
 				A1000055000000000000001 /* SyncSettingsView.swift in Sources */,
+				A1000057000000000000001 /* SignatureListViewModel.swift in Sources */,
+				A1000059000000000000001 /* SignatureEditorViewModel.swift in Sources */,
+				A1000061000000000000001 /* SyncViewModel.swift in Sources */,
+				A1000063000000000000001 /* MailSyncService.swift in Sources */,
+				A1000065000000000000001 /* KeychainService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
