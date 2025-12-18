@@ -1,5 +1,6 @@
 import Foundation
 import OSAKit
+import CryptoKit
 
 enum MailAccessStatus: Equatable {
     case granted
@@ -253,18 +254,44 @@ class MailSyncService {
     }
     
     private func parseAppleScriptAccountResult(_ result: NSAppleEventDescriptor) -> [MailAccountCache.MailAccount] {
-        // Parse the AppleScript result and convert to MailAccount objects
-        // This is a simplified implementation
         var accounts: [MailAccountCache.MailAccount] = []
         
-        // For demo purposes, create sample accounts
-        accounts.append(MailAccountCache.MailAccount(
-            id: UUID().uuidString,
-            emailAddress: "user@icloud.com",
-            accountName: "iCloud",
-            isICloud: true,
-            lastRefresh: Date()
-        ))
+        // AppleScript lists use 1-based indexing
+        let accountCount = result.numberOfItems
+        
+        for i in 1...accountCount {
+            guard let accountRecord = result.atIndex(i) else { continue }
+            
+            // Each record is a list: {name, userName, emailAddresses}
+            guard accountRecord.numberOfItems >= 3 else { continue }
+            
+            let accountName = accountRecord.atIndex(1)?.stringValue ?? "Unknown"
+            _ = accountRecord.atIndex(2)?.stringValue // userName (unused but part of AppleScript result)
+            
+            // Email addresses is a list
+            guard let emailList = accountRecord.atIndex(3) else { continue }
+            
+            // Get the first email address (primary)
+            var emailAddress = ""
+            if emailList.numberOfItems > 0,
+               let firstEmail = emailList.atIndex(1)?.stringValue {
+                emailAddress = firstEmail
+            }
+            
+            // Skip accounts without email
+            guard !emailAddress.isEmpty else { continue }
+            
+            let isICloud = accountName.lowercased().contains("icloud") || 
+                          emailAddress.lowercased().contains("icloud.com")
+            
+            accounts.append(MailAccountCache.MailAccount(
+                id: UUID().uuidString,
+                emailAddress: emailAddress,
+                accountName: accountName,
+                isICloud: isICloud,
+                lastRefresh: Date()
+            ))
+        }
         
         return accounts
     }
@@ -287,15 +314,49 @@ class MailSyncService {
     }
     
     private func parseAccountDirectory(_ directory: URL) throws -> MailAccountCache.MailAccount? {
-        // Parse account information from directory structure
-        // This is a simplified implementation
-        let accountName = directory.lastPathComponent
+        let accountId = directory.lastPathComponent
+        
+        // Try to read Info.plist from the account directory
+        let infoPlistPath = directory.appendingPathComponent("Info.plist")
+        
+        guard fileManager.fileExists(atPath: infoPlistPath.path) else {
+            return nil
+        }
+        
+        guard let plistData = try? Data(contentsOf: infoPlistPath),
+              let plist = try? PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any] else {
+            return nil
+        }
+        
+        // Extract email addresses (usually stored as an array)
+        var emailAddress = ""
+        if let emailAddresses = plist["EmailAddresses"] as? [String], !emailAddresses.isEmpty {
+            emailAddress = emailAddresses[0]
+        } else if let email = plist["EmailAddress"] as? String {
+            emailAddress = email
+        }
+        
+        // Skip if no email found
+        guard !emailAddress.isEmpty else {
+            return nil
+        }
+        
+        // Extract account name
+        let accountName = (plist["AccountName"] as? String) ?? 
+                         (plist["FullUserName"] as? String) ?? 
+                         emailAddress
+        
+        // Determine if it's an iCloud account
+        let accountType = plist["AccountType"] as? String ?? ""
+        let isICloud = accountType.contains("iCloud") || 
+                      accountName.lowercased().contains("icloud") ||
+                      emailAddress.lowercased().contains("icloud.com")
         
         return MailAccountCache.MailAccount(
-            id: accountName,
-            emailAddress: "\(accountName)@example.com",
+            id: accountId,
+            emailAddress: emailAddress,
             accountName: accountName,
-            isICloud: accountName.contains("iCloud"),
+            isICloud: isICloud,
             lastRefresh: Date()
         )
     }
@@ -467,5 +528,11 @@ extension String {
             .replacingOccurrences(of: ">", with: "&gt;")
             .replacingOccurrences(of: "\"", with: "&quot;")
             .replacingOccurrences(of: "'", with: "&#39;")
+    }
+    
+    var sha256: String {
+        let data = Data(self.utf8)
+        let hash = SHA256.hash(data: data)
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
 }

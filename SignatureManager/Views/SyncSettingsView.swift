@@ -196,8 +196,32 @@ struct SyncSettingsView: View {
     }
     
     private func syncToMail(account: MailAccountCache.MailAccount) {
-        // TODO: Implement Mail sync
-        print("Syncing to Mail account: \(account.emailAddress)")
+        guard let signature = selectedSignature else { return }
+        
+        syncInProgress = true
+        lastError = nil
+        
+        Task {
+            do {
+                print("🔄 Syncing '\(signature.name)' to \(account.emailAddress)...")
+                try await MailSyncService.shared.syncSignatureToMail(
+                    signature,
+                    account: account,
+                    storageService: storageService
+                )
+                print("✅ Synced to \(account.emailAddress)")
+                
+                await MainActor.run {
+                    syncInProgress = false
+                }
+            } catch {
+                print("❌ Sync failed: \(error.localizedDescription)")
+                await MainActor.run {
+                    lastError = "Failed to sync to \(account.emailAddress): \(error.localizedDescription)"
+                    syncInProgress = false
+                }
+            }
+        }
     }
     
     private func syncToGmail(account: GmailAccountCache.GmailAccount) {
@@ -208,14 +232,46 @@ struct SyncSettingsView: View {
     private func syncAllToMail() {
         guard let signature = selectedSignature else { return }
         
+        let accounts = storageService.mailAccountCache.mailAccounts
+        guard !accounts.isEmpty else {
+            lastError = "No Mail accounts found"
+            return
+        }
+        
         syncInProgress = true
         lastError = nil
         
-        // TODO: Implement bulk Mail sync
-        print("Syncing signature '\(signature.name)' to all Mail accounts")
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            syncInProgress = false
+        Task {
+            var successCount = 0
+            var failedAccounts: [String] = []
+            
+            print("🔄 Syncing '\(signature.name)' to \(accounts.count) Mail account(s)...")
+            
+            for account in accounts {
+                do {
+                    try await MailSyncService.shared.syncSignatureToMail(
+                        signature,
+                        account: account,
+                        storageService: storageService
+                    )
+                    successCount += 1
+                    print("  ✅ \(account.emailAddress)")
+                } catch {
+                    failedAccounts.append(account.emailAddress)
+                    print("  ❌ \(account.emailAddress): \(error.localizedDescription)")
+                }
+            }
+            
+            await MainActor.run {
+                if failedAccounts.isEmpty {
+                    print("✅ Successfully synced to all \(successCount) account(s)")
+                } else {
+                    let errorMsg = "Synced to \(successCount)/\(accounts.count) accounts. Failed: \(failedAccounts.joined(separator: ", "))"
+                    lastError = errorMsg
+                    print("⚠️ \(errorMsg)")
+                }
+                syncInProgress = false
+            }
         }
     }
     
