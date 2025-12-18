@@ -4,18 +4,30 @@ A powerful macOS application for seamlessly syncing email signatures between App
 
 ## Features
 
-- **Cross-Platform Sync**: Synchronize signatures between Apple Mail and Gmail
-- **Rich HTML Editor**: Create and edit HTML signatures with real-time preview
-- **Validation Engine**: Built-in compatibility checks for different email clients
-- **Secure Storage**: OAuth tokens stored securely in macOS Keychain
-- **Multiple Accounts**: Support for multiple Gmail accounts and Mail identities
-- **Template Library**: Pre-built signature templates for quick setup
-- **Conflict Resolution**: Smart handling of signature conflicts between services
+- **🚀 Auto-Discovery**: Automatically detects existing email accounts and imports signatures on first launch
+- **🔄 Cross-Platform Sync**: Synchronize signatures between Apple Mail and Gmail
+- **✏️ Rich HTML Editor**: Create and edit HTML signatures with real-time preview
+- **✅ Validation Engine**: Built-in compatibility checks for different email clients
+- **🔒 Secure Storage**: OAuth tokens stored securely in macOS Keychain
+- **📧 Multiple Accounts**: Support for multiple Gmail accounts and Mail identities
+- **📋 Template Library**: Pre-built signature templates for quick setup
+- **⚡ Conflict Resolution**: Smart handling of signature conflicts between services
+
+## Quick Start
+
+```bash
+# Clone, build, and run
+git clone https://github.com/starfysh-tech/sigsync.git
+cd sigsync
+./build.sh --run
+```
+
+That's it! The application will build and launch automatically.
 
 ## Requirements
 
 - macOS 13.0 (Ventura) or later
-- Xcode 15.0 or later (for development)
+- Xcode 15.0 or later (for building)
 - Apple Mail (for Mail sync functionality)
 - Internet connection (for Gmail sync)
 
@@ -23,29 +35,47 @@ A powerful macOS application for seamlessly syncing email signatures between App
 
 ### From Source
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/starfysh-tech/sigsync.git
-   cd sigsync
-   ```
+**Recommended: Use the build script**
 
-2. Open the project in Xcode:
-   ```bash
-   open SignatureManager.xcodeproj
-   ```
+```bash
+git clone https://github.com/starfysh-tech/sigsync.git
+cd sigsync
+./build.sh --run
+```
 
-3. Build and run the application (⌘+R)
+**Why use the build script?**
+- ✅ **Fast**: Incremental builds (only rebuilds what changed)
+- ✅ **Clean**: Shows only errors and warnings, not pages of output
+- ✅ **Simple**: One command for everything (`./build.sh --run`)
+- ✅ **Smart**: Handles all dependencies automatically
+
+**Other options:**
+
+Run `./build.sh --help` to see all options, or use Xcode:
+
+**Use Xcode**
+
+```bash
+open SignatureManager.xcodeproj
+# Build and run with ⌘+R
+```
 
 ## Usage
 
 ### Getting Started
 
-1. **Launch SignatureManager** from your Applications folder
-2. **Create your first signature** using the built-in editor
-3. **Connect your accounts**:
-   - Apple Mail accounts are discovered automatically
+1. **Launch SignatureManager** - The app will automatically:
+   - 🔍 Detect existing Apple Mail accounts
+   - 📥 Import any existing Mail.app signatures
+   - This happens only on first launch when no signatures exist
+
+2. **Create or edit signatures** using the built-in HTML editor
+
+3. **Connect additional accounts**:
+   - Apple Mail accounts are auto-detected
    - Gmail accounts require OAuth authentication
-4. **Sync signatures** to your desired accounts
+
+4. **Sync signatures** to your desired accounts with one click
 
 ### Creating Signatures
 
@@ -58,7 +88,8 @@ A powerful macOS application for seamlessly syncing email signatures between App
 ### Syncing to Services
 
 #### Apple Mail
-- Signatures are automatically synced to `~/Library/Mail/V10/MailData/Signatures/`
+- Signatures are automatically synced to `~/Library/Mail/V*/MailData/Signatures/`
+- Automatically detects your Mail version (V8 through V12)
 - Requires **Full Disk Access** permission for Mail data access
 - Works with all configured Mail accounts
 
@@ -72,14 +103,18 @@ A powerful macOS application for seamlessly syncing email signatures between App
 The application follows a clean MVVM (Model-View-ViewModel) architecture:
 
 ```
-SignatureManager/
-├── App/                    # Application entry point
-├── Models/                 # Data models and structures
-├── Views/                  # SwiftUI user interface
-├── ViewModels/             # MVVM view models
-├── Services/               # Business logic and API services
-├── Infrastructure/         # Core utilities and helpers
-└── Resources/              # Assets, entitlements, and configuration
+sigsync/
+├── SignatureManager/           # Main application source
+│   ├── App/                    # Application entry point
+│   ├── Models/                 # Data models and structures
+│   ├── Views/                  # SwiftUI user interface
+│   ├── ViewModels/             # MVVM view models
+│   ├── Services/               # Business logic and API services
+│   ├── Infrastructure/         # Core utilities and helpers
+│   └── Resources/              # Assets, entitlements, and configuration
+├── SignatureManager.xcodeproj/ # Xcode project files
+├── build.sh                    # Build script (./build.sh --help)
+└── README.md                   # This file
 ```
 
 ### Key Components
@@ -120,25 +155,126 @@ The project uses modern Swift development practices:
 - **Keychain Services** for secure storage
 - **WebKit** for HTML preview
 
-### Building
+### Building from Command Line
+
+**The paved road: Use `./build.sh`**
 
 ```bash
-# Clone the repository
-git clone https://github.com/starfysh-tech/sigsync.git
-cd sigsync
+# Build and run (recommended for development)
+./build.sh --run
 
-# Open in Xcode
-open SignatureManager.xcodeproj
+# Just build (fast incremental builds)
+./build.sh
 
-# Or build from command line
-xcodebuild -project SignatureManager.xcodeproj -scheme SignatureManager build
+# Build Release for distribution
+./build.sh --release
+
+# Build and run Release
+./build.sh --release --run
+
+# Force clean build (when things go wrong)
+./build.sh --clean
+
+# See all options
+./build.sh --help
 ```
+
+**Common workflows:**
+
+```bash
+# Daily development
+./build.sh -r                    # Build and run Debug
+
+# Testing before commit
+./build.sh --clean --release     # Clean Release build
+
+# Quick iteration
+./build.sh && ./build.sh         # Fast incremental builds
+
+# Build for distribution
+./build.sh -R                    # Release build
+```
+
+**Build artifacts:**
+- Debug: `build/Build/Products/Debug/SignatureManager.app`
+- Release: `build/Build/Products/Release/SignatureManager.app`
+
+### ⚠️ Full Disk Access During Development
+
+**Important:** Each time you rebuild the app, macOS sees it as a "different app" because the code signature changes. This means:
+
+- Full Disk Access permission is **revoked after every build**
+- You must re-grant FDA permission each time during development
+- Or use the built-in FDA Debug Tool (press `Cmd+Option+D` in the app)
+
+**Workaround for development:**
+1. Build once: `./build.sh`
+2. Copy to a stable location: `cp -R build/Build/Products/Debug/SignatureManager.app ~/Applications/Dev/`
+3. Grant FDA to the copy in System Settings
+4. Run from that location for testing
+
+This only affects development builds. Properly signed release builds don't have this issue.
 
 ### Testing
 
+SignatureManager includes comprehensive behavior-focused tests that verify user-visible functionality without testing implementation details.
+
+**Quick start:**
+
 ```bash
-# Run unit tests
-xcodebuild test -project SignatureManager.xcodeproj -scheme SignatureManager
+# Run all tests (after adding test target in Xcode - see below)
+./build.sh --test
+
+# Or use xcodebuild directly
+xcodebuild test -project SignatureManager.xcodeproj \
+                -scheme SignatureManager \
+                -destination 'platform=macOS,arch=arm64'
+```
+
+**Test coverage includes:**
+
+- ✅ **Auto-discovery**: First launch behavior, signature import, account detection
+- ✅ **Signature import**: Parsing Mail.app files, format handling, error cases
+- ✅ **Storage operations**: CRUD operations, persistence, conflict handling
+- ✅ **Sync behavior**: Cross-platform synchronization logic
+
+**Test infrastructure:**
+
+- `SignatureManagerTests/Integration/` - End-to-end behavior tests
+- `SignatureManagerTests/Services/` - Service-level behavior tests
+- `SignatureManagerTests/TestHelpers/` - Mock implementations and fixtures
+
+**One-time setup:**
+
+Tests are written but need to be added to Xcode (one-time setup):
+
+1. Open `SignatureManager.xcodeproj` in Xcode
+2. Add a new **Unit Testing Bundle** target named `SignatureManagerTests`
+3. Add test files from `SignatureManagerTests/` directory
+4. Enable testability in main app target (Build Settings → "Enable Testability" → YES for Debug)
+
+See **[SignatureManagerTests/README.md](SignatureManagerTests/README.md)** for detailed setup instructions and testing philosophy.
+
+**Test philosophy:**
+
+We test **behavior** (what users see), not **implementation** (how code works):
+
+```swift
+// ✅ Good: Tests user-visible behavior
+func testFirstLaunch_WithExistingSignatures_ImportsThemAutomatically()
+
+// ❌ Bad: Tests internal implementation
+func testParseMailSignatureFileCallsPropertyListSerialization()
+```
+
+This approach ensures tests survive refactoring and catch real regressions.
+
+### Installing to Applications
+
+```bash
+# Build Release and install
+./build.sh --release
+cp -R build/Build/Products/Release/SignatureManager.app /Applications/
 ```
 
 ## Contributing

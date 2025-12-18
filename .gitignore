@@ -2,6 +2,9 @@
 #
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
 
+## Build directory (from build scripts)
+build/
+
 ## User settings
 xcuserdata/
 
@@ -60,3 +63,22 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Development and temporary files
+*.md~
+*_FIX.md
+*_SUMMARY.md
+*_ANALYSIS.md
+*_PLAN.md
+*_GUIDE.md
+*_CHECKLIST.md
+test_*.sh
+debug_*.sh
+grant_*.sh
+check_*.sh
+open_*.sh
+quick_*.sh
+reset_*.sh
+.ai-instructions
+.githooks/
+SignatureManagerTests/

@@ -1,8 +1,10 @@
 import SwiftUI
+import AppKit
 
 struct SignatureListView: View {
     @ObservedObject var storageService = SignatureStorageService.shared
     @Binding var selectedSignature: SignatureModel?
+    @State private var hasTriggeredDiscovery = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -28,26 +30,154 @@ struct SignatureListView: View {
             Divider()
             
             // Signature List
-            if storageService.signatures.isEmpty {
+            if storageService.isPerformingInitialDiscovery {
                 VStack(spacing: 12) {
-                    Image(systemName: "signature")
-                        .font(.system(size: 32))
-                        .foregroundColor(.secondary)
+                    ProgressView()
+                        .scaleEffect(0.8)
                     
-                    Text("No signatures yet")
+                    Text("Discovering email accounts...")
                         .font(.headline)
                         .foregroundColor(.secondary)
                     
-                    Text("Create your first email signature to get started")
+                    Text("Looking for existing signatures in Mail.app")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
-                    
-                    Button("Create Sample Signature") {
-                        createSampleSignature()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding()
+            } else if storageService.signatures.isEmpty {
+                VStack(spacing: 16) {
+                    // Show error if discovery failed
+                    if let error = storageService.lastDiscoveryError {
+                        ScrollView {
+                            VStack(spacing: 12) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(.orange)
+                                
+                                Text("Setup Required")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(.horizontal)
+                                    .textSelection(.enabled)
+                                
+                                if error.contains("Full Disk Access") {
+                                    VStack(spacing: 8) {
+                                        Button("Open System Settings") {
+                                            openSystemSettings()
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .controlSize(.small)
+                                        
+                                        HStack(spacing: 8) {
+                                            Button("Show App in Finder") {
+                                                showAppInFinder()
+                                            }
+                                            .buttonStyle(.bordered)
+                                            .controlSize(.small)
+                                            
+                                            Button("Copy Path") {
+                                                copyAppPath()
+                                            }
+                                            .buttonStyle(.bordered)
+                                            .controlSize(.small)
+                                        }
+                                        
+                                        Text("After granting access, click Retry")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                
+                                Button("Retry Discovery") {
+                                    retryDiscovery()
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                
+                                Divider()
+                                    .padding(.vertical, 4)
+                                
+                                Text("Or skip discovery and create manually:")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                
+                                Button("Create Signature Manually") {
+                                    createSampleSignature()
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                            .padding()
+                        }
+                    } else if storageService.discoveryCompletedSuccessfully {
+                        // Discovery completed successfully but found nothing
+                        VStack(spacing: 12) {
+                            Image(systemName: "checkmark.circle")
+                                .font(.system(size: 32))
+                                .foregroundColor(.green)
+                            
+                            Text("No Signatures Found")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                            
+                            Text("Checked Mail.app but didn't find any existing signatures")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                            
+                            VStack(spacing: 8) {
+                                Button("Create Sample Signature") {
+                                    createSampleSignature()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                                
+                                Button("Create Blank Signature") {
+                                    createNewSignature()
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        }
+                    } else {
+                        // Discovery hasn't run yet or status unknown
+                        VStack(spacing: 12) {
+                            Image(systemName: "signature")
+                                .font(.system(size: 32))
+                                .foregroundColor(.secondary)
+                            
+                            Text("No signatures yet")
+                                .font(.headline)
+                                .foregroundColor(.secondary)
+                            
+                            Text("Create your first signature")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            VStack(spacing: 8) {
+                                Button("Create Sample Signature") {
+                                    createSampleSignature()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                                
+                                Button("Search for Existing") {
+                                    retryDiscovery()
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding()
@@ -68,6 +198,24 @@ struct SignatureListView: View {
         }
         .frame(width: 250)
         .background(Color(NSColor.controlBackgroundColor))
+        .task {
+            // Check permission and run discovery on first appearance
+            if !hasTriggeredDiscovery {
+                hasTriggeredDiscovery = true
+                
+                // Debug: Write to file so we know this is being called
+                let debugMsg = "📱 SignatureListView.task called at \(Date())\n"
+                try? debugMsg.write(toFile: "/tmp/sigsync_task_debug.txt", atomically: true, encoding: .utf8)
+                
+                print("📱 App launched - checking permissions and running discovery...")
+                
+                // Check if permission was granted since last launch
+                await storageService.checkPermissionAndRetryIfNeeded()
+                
+                // Then run normal initial discovery if needed
+                await storageService.performInitialDiscoveryIfNeeded()
+            }
+        }
     }
     
     private func createNewSignature() {
@@ -100,6 +248,35 @@ struct SignatureListView: View {
             }
         } catch {
             print("Failed to delete signature: \(error)")
+        }
+    }
+    
+    private func openSystemSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+    
+    private func copyAppPath() {
+        let path = Bundle.main.bundleURL.path
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(path, forType: .string)
+        print("📋 Copied app path to clipboard: \(path)")
+    }
+    
+    private func showAppInFinder() {
+        NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+        print("📂 Showing app in Finder: \(Bundle.main.bundleURL.path)")
+    }
+    
+    private func retryDiscovery() {
+        Task {
+            print("🔄 User triggered retry discovery")
+            hasTriggeredDiscovery = false
+            storageService.resetInitialDiscovery()
+            // Use force=true to run discovery even if signatures already exist
+            await storageService.performDiscovery(force: true)
+            print("✅ Retry discovery completed")
         }
     }
 }

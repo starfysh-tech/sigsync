@@ -18,7 +18,7 @@ struct SignatureEditorView: View {
                 TextField("Signature Name", text: $signatureName)
                     .textFieldStyle(.roundedBorder)
                     .font(.headline)
-                    .onChange(of: signatureName) { _ in
+                    .onChange(of: signatureName) {
                         markDirty()
                     }
                 
@@ -60,7 +60,7 @@ struct SignatureEditorView: View {
                 
                 TextEditor(text: $htmlContent)
                     .font(.system(.body, design: .monospaced))
-                    .onChange(of: htmlContent) { _ in
+                    .onChange(of: htmlContent) {
                         markDirty()
                         scheduleValidation()
                     }
@@ -70,7 +70,7 @@ struct SignatureEditorView: View {
         .onAppear {
             loadSignature()
         }
-        .onChange(of: signature) { _ in
+        .onChange(of: signature) {
             loadSignature()
         }
     }

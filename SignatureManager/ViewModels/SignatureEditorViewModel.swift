@@ -153,7 +153,7 @@ class SignatureEditorViewModel: ObservableObject {
     func formatSelection(with tag: String) {
         // For now, just append the tag - in a real implementation,
         // you'd want to track text selection in the editor
-        htmlContent += "<\(tag)><\/\(tag)>"
+        htmlContent += "<\(tag)></\(tag)>"
     }
     
     func clearError() {

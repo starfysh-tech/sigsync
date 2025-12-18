@@ -1,6 +1,6 @@
 import Foundation
 
-struct SignatureAccountBinding: Codable, Identifiable {
+struct SignatureAccountBinding: Codable, Identifiable, Equatable {
     enum AccountType: String, Codable {
         case apple_mail
         case gmail
@@ -15,7 +15,7 @@ struct SignatureAccountBinding: Codable, Identifiable {
     var lastSyncTime: Date?
 }
 
-struct SignatureModel: Codable, Identifiable {
+struct SignatureModel: Codable, Identifiable, Equatable {
     var id: UUID
     var name: String
     var htmlContent: String

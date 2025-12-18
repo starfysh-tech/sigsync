@@ -1,6 +1,38 @@
 import Foundation
 import OSAKit
 
+enum MailAccessStatus: Equatable {
+    case granted
+    case permissionDenied
+    case mailNotConfigured
+    
+    var userMessage: String {
+        switch self {
+        case .granted:
+            return "Mail access available"
+        case .permissionDenied:
+            return """
+Full Disk Access Required
+
+To import signatures from Mail.app:
+1. Open System Settings > Privacy & Security > Full Disk Access
+2. Click the lock icon (bottom left) to unlock
+3. Click the "+" button
+4. Navigate to: \(Bundle.main.bundleURL.path)
+5. Select SignatureManager.app and click Open
+6. Make sure the toggle is ON
+7. Click Retry Discovery in this app
+"""
+        case .mailNotConfigured:
+            return "Mail.app has not been set up yet. Configure Mail accounts in the Mail app first, then try again."
+        }
+    }
+    
+    var isAccessible: Bool {
+        return self == .granted
+    }
+}
+
 enum MailSyncError: Error {
     case mailNotInstalled
     case mailNotRunning
@@ -34,7 +66,10 @@ class MailSyncService {
     static let shared = MailSyncService()
     
     private let fileManager = FileManager.default
-    private let storageService = SignatureStorageService.shared
+    
+    // FIXED: Removed circular dependency
+    // DO NOT store SignatureStorageService.shared here as it creates a deadlock
+    // Pass it as a parameter to methods that need it
     
     private init() {}
     
@@ -42,7 +77,20 @@ class MailSyncService {
     
     private var mailDataDirectory: URL {
         let homeDirectory = fileManager.homeDirectoryForCurrentUser
-        return homeDirectory.appendingPathComponent("Library/Mail/V10/MailData")
+        let mailDirectory = homeDirectory.appendingPathComponent("Library/Mail")
+        
+        // Try to detect Mail version dynamically (V8 through V12)
+        for version in (8...12).reversed() {
+            let versionedPath = mailDirectory.appendingPathComponent("V\(version)/MailData")
+            if fileManager.fileExists(atPath: versionedPath.path) {
+                NSLog("📧 Detected Mail version: V\(version)")
+                return versionedPath
+            }
+        }
+        
+        // Fallback to V10 if detection fails
+        NSLog("⚠️ Could not detect Mail version, using V10 as fallback")
+        return mailDirectory.appendingPathComponent("V10/MailData")
     }
     
     private var signaturesDirectory: URL {
@@ -51,6 +99,104 @@ class MailSyncService {
     
     private var accountsDirectory: URL {
         mailDataDirectory.appendingPathComponent("Accounts")
+    }
+    
+    // MARK: - Permission Checking
+    
+    func checkMailAccessPermission() -> MailAccessStatus {
+        let mailDir = mailDataDirectory
+        
+        NSLog("🔍 Checking FDA for Mail directory: %@", mailDir.path)
+        
+        // Check if Mail directory exists
+        guard fileManager.fileExists(atPath: mailDir.path) else {
+            NSLog("   ℹ️ Mail directory doesn't exist - Mail.app not configured")
+            return .mailNotConfigured
+        }
+        
+        // ONLY trust actual access attempt - DO NOT use isReadableFile()!
+        // isReadableFile() checks Unix permissions (always true for user's home dir)
+        // TCC (Full Disk Access) is a separate layer that can block even "readable" files
+        // The ONLY reliable test is to actually try reading the directory
+        do {
+            let contents = try fileManager.contentsOfDirectory(atPath: mailDir.path)
+            NSLog("   ✅ FDA granted - read %d items: %@", contents.count, contents.joined(separator: ", "))
+            
+            // Verify we found actual Mail data
+            let hasAccounts = contents.contains("Accounts")
+            let hasSignatures = contents.contains("Signatures")
+            
+            if !hasAccounts && !hasSignatures {
+                NSLog("   ⚠️ Directory accessible but no Mail data (Accounts/Signatures missing)")
+                return .mailNotConfigured
+            }
+            
+            // Write success to debug file
+            let debugLog = "/tmp/sigsync_permission_debug.txt"
+            let debugInfo = """
+            🔍 Permission Check at \(Date())
+            Mail directory: \(mailDir.path)
+            ✅ FDA granted
+            Found \(contents.count) items: \(contents.joined(separator: ", "))
+            """
+            try? debugInfo.write(toFile: debugLog, atomically: true, encoding: .utf8)
+            
+            return .granted
+            
+        } catch let error as NSError {
+            NSLog("   ❌ FDA denied - TCC blocked access")
+            NSLog("      Error: %@ (domain: %@, code: %ld)", 
+                  error.localizedDescription, error.domain, error.code)
+            
+            // Write failure to debug file
+            let debugLog = "/tmp/sigsync_permission_debug.txt"
+            let debugInfo = """
+            🔍 Permission Check at \(Date())
+            Mail directory: \(mailDir.path)
+            ❌ FDA denied
+            Error: \(error.localizedDescription)
+            Domain: \(error.domain)
+            Code: \(error.code)
+            
+            To fix:
+            1. Open System Settings > Privacy & Security > Full Disk Access
+            2. Click lock icon to unlock
+            3. Remove any old SignatureManager entries
+            4. Click + and add: \(Bundle.main.bundleURL.path)
+            5. Toggle ON
+            6. Restart this app
+            """
+            try? debugInfo.write(toFile: debugLog, atomically: true, encoding: .utf8)
+            
+            // Check error type for classification
+            if error.domain == NSCocoaErrorDomain && 
+               (error.code == NSFileReadNoPermissionError || error.code == 257) {
+                return .permissionDenied
+            }
+            
+            // Check error message for permission indicators
+            let message = error.localizedDescription.lowercased()
+            if message.contains("permission") || message.contains("not permitted") {
+                return .permissionDenied
+            }
+            
+            // Unknown error - treat as permission issue to be safe
+            NSLog("      Treating as permission error")
+            return .permissionDenied
+        }
+    }
+    
+    func requestMailAccessPermission() {
+        // Attempt to access the Mail directory, which will trigger a system prompt
+        // if the app hasn't been granted permission yet
+        let mailDir = mailDataDirectory
+        do {
+            _ = try fileManager.contentsOfDirectory(atPath: mailDir.path)
+            print("✅ Already have permission to access Mail directory")
+        } catch {
+            print("⚠️ Permission denied - user needs to manually grant Full Disk Access")
+            print("   App location: \(Bundle.main.bundleURL.path)")
+        }
     }
     
     // MARK: - Account Discovery
@@ -72,17 +218,8 @@ class MailSyncService {
             accounts = try discoverAccountsViaFileSystem()
         }
         
-        // Update cache
-        var cache = storageService.mailAccountCache
-        cache.mailAccounts = accounts
-        cache.lastUpdated = Date()
-        
-        await MainActor.run {
-            storageService.mailAccountCache = cache
-        }
-        
-        try storageService.saveMailAccountCache()
-        
+        // FIXED: Return accounts for caller to cache
+        // Don't update storage here to avoid circular dependency
         return accounts
     }
     
@@ -98,9 +235,7 @@ class MailSyncService {
         end tell
         """
         
-        guard let appleScript = OSAScript(source: script) else {
-            throw MailSyncError.accountDiscoveryFailed
-        }
+        let appleScript = OSAScript(source: script)
         
         var error: NSDictionary?
         let result = appleScript.executeAndReturnError(&error)
@@ -110,10 +245,14 @@ class MailSyncService {
             throw MailSyncError.accountDiscoveryFailed
         }
         
+        guard let result = result else {
+            throw MailSyncError.accountDiscoveryFailed
+        }
+        
         return parseAppleScriptAccountResult(result)
     }
     
-    private func parseAppleScriptAccountResult(_ result: OSAScriptResult) -> [MailAccountCache.MailAccount] {
+    private func parseAppleScriptAccountResult(_ result: NSAppleEventDescriptor) -> [MailAccountCache.MailAccount] {
         // Parse the AppleScript result and convert to MailAccount objects
         // This is a simplified implementation
         var accounts: [MailAccountCache.MailAccount] = []
@@ -121,9 +260,10 @@ class MailSyncService {
         // For demo purposes, create sample accounts
         accounts.append(MailAccountCache.MailAccount(
             id: UUID().uuidString,
-            accountName: "iCloud",
             emailAddress: "user@icloud.com",
-            isICloud: true
+            accountName: "iCloud",
+            isICloud: true,
+            lastRefresh: Date()
         ))
         
         return accounts
@@ -153,15 +293,16 @@ class MailSyncService {
         
         return MailAccountCache.MailAccount(
             id: accountName,
-            accountName: accountName,
             emailAddress: "\(accountName)@example.com",
-            isICloud: accountName.contains("iCloud")
+            accountName: accountName,
+            isICloud: accountName.contains("iCloud"),
+            lastRefresh: Date()
         )
     }
     
     // MARK: - Signature Sync
     
-    func syncSignatureToMail(_ signature: SignatureModel, account: MailAccountCache.MailAccount) async throws {
+    func syncSignatureToMail(_ signature: SignatureModel, account: MailAccountCache.MailAccount, storageService: SignatureStorageService) async throws {
         try ensureSignaturesDirectoryExists()
         
         let signatureFileName = "\(signature.id.uuidString).mailsignature"
@@ -206,6 +347,74 @@ class MailSyncService {
         """
         
         return plistContent
+    }
+    
+    // MARK: - Signature Import
+    
+    func importExistingSignatures() async throws -> [SignatureModel] {
+        guard fileManager.fileExists(atPath: signaturesDirectory.path) else {
+            return []
+        }
+        
+        let signatureFiles = try fileManager.contentsOfDirectory(at: signaturesDirectory, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "mailsignature" }
+        
+        var importedSignatures: [SignatureModel] = []
+        
+        for fileURL in signatureFiles {
+            if let signature = try? parseMailSignatureFile(fileURL) {
+                importedSignatures.append(signature)
+            }
+        }
+        
+        return importedSignatures
+    }
+    
+    private func parseMailSignatureFile(_ fileURL: URL) throws -> SignatureModel? {
+        let data = try Data(contentsOf: fileURL)
+        
+        guard let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+            return nil
+        }
+        
+        guard let signatureName = plist["SignatureName"] as? String,
+              let signatureText = plist["SignatureText"] as? String else {
+            return nil
+        }
+        
+        // Clean up the signature text - it might contain RTF or plain text
+        let htmlContent = convertToHTML(signatureText)
+        
+        var signature = SignatureModel(name: signatureName, htmlContent: htmlContent)
+        
+        // Try to extract UUID if it exists
+        if let signatureId = plist["SignatureUniqueId"] as? String,
+           let uuid = UUID(uuidString: signatureId) {
+            signature.id = uuid
+        }
+        
+        return signature
+    }
+    
+    private func convertToHTML(_ text: String) -> String {
+        // If it's already HTML, return as-is
+        if text.lowercased().contains("<html") || text.lowercased().contains("<!doctype") {
+            return text
+        }
+        
+        // If it contains HTML tags, wrap it
+        if text.contains("<") && text.contains(">") {
+            return text
+        }
+        
+        // Otherwise, convert plain text to HTML
+        let escapedText = text
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\n", with: "<br>")
+        
+        return "<div style=\"font-family: system-ui, -apple-system, sans-serif;\">\(escapedText)</div>"
     }
     
     // MARK: - Signature Retrieval

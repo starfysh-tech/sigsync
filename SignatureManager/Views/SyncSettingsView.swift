@@ -5,6 +5,8 @@ struct SyncSettingsView: View {
     @ObservedObject var storageService = SignatureStorageService.shared
     @State private var syncInProgress = false
     @State private var lastError: String?
+    @State private var isRefreshing = false
+    @State private var refreshError: String?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -33,6 +35,15 @@ struct SyncSettingsView: View {
                     Text("Sync Settings")
                         .font(.headline)
                     
+                    // Show discovery error banner if present
+                    if let error = storageService.lastDiscoveryError {
+                        PermissionBanner(
+                            message: error,
+                            onOpenSettings: openSystemSettings,
+                            onRetry: retryDiscovery
+                        )
+                    }
+                    
                     // Apple Mail Section
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
@@ -49,11 +60,20 @@ struct SyncSettingsView: View {
                                     .foregroundColor(.secondary)
                                     .font(.caption)
                                 
-                                Button("Refresh Accounts") {
-                                    // TODO: Refresh mail accounts
+                                Button(isRefreshing ? "Refreshing..." : "Refresh Accounts") {
+                                    Task {
+                                        await refreshMailAccounts()
+                                    }
                                 }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
+                                .disabled(isRefreshing)
+                                
+                                if let error = refreshError {
+                                    Text(error)
+                                        .font(.caption2)
+                                        .foregroundColor(.red)
+                                }
                             }
                         } else {
                             VStack(alignment: .leading, spacing: 6) {
@@ -147,6 +167,34 @@ struct SyncSettingsView: View {
         .background(Color(NSColor.controlBackgroundColor))
     }
     
+    private func refreshMailAccounts() async {
+        isRefreshing = true
+        refreshError = nil
+        
+        do {
+            print("🔄 Refreshing Mail accounts...")
+            let accounts = try await MailSyncService.shared.discoverMailAccounts()
+            print("✅ Discovered \(accounts.count) Mail account(s)")
+            
+            // FIXED: Update the cache properly
+            await MainActor.run {
+                var cache = storageService.mailAccountCache
+                cache.mailAccounts = accounts
+                storageService.mailAccountCache = cache
+            }
+            try storageService.saveMailAccountCache()
+            print("✅ Cached \(accounts.count) account(s)")
+        } catch {
+            let permissionStatus = MailSyncService.shared.checkMailAccessPermission()
+            refreshError = permissionStatus.isAccessible ? 
+                error.localizedDescription : 
+                permissionStatus.userMessage
+            print("❌ Refresh failed: \(refreshError ?? "Unknown error")")
+        }
+        
+        isRefreshing = false
+    }
+    
     private func syncToMail(account: MailAccountCache.MailAccount) {
         // TODO: Implement Mail sync
         print("Syncing to Mail account: \(account.emailAddress)")
@@ -182,6 +230,19 @@ struct SyncSettingsView: View {
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             syncInProgress = false
+        }
+    }
+    
+    private func openSystemSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+    
+    private func retryDiscovery() {
+        Task {
+            storageService.resetInitialDiscovery()
+            await storageService.performInitialDiscoveryIfNeeded()
         }
     }
 }
@@ -264,4 +325,50 @@ struct GmailAccountRow: View {
 
 #Preview {
     SyncSettingsView(selectedSignature: .constant(SignatureStorageService.shared.createSampleSignature()))
+}
+
+struct PermissionBanner: View {
+    let message: String
+    let onOpenSettings: () -> Void
+    let onRetry: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+                .font(.title3)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Permission Required")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                
+                Text(message)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            Spacer()
+            
+            VStack(spacing: 4) {
+                if message.contains("Full Disk Access") {
+                    Button("Open Settings") {
+                        onOpenSettings()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+                
+                Button("Retry") {
+                    onRetry()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding(12)
+        .background(Color.orange.opacity(0.1))
+        .cornerRadius(8)
+    }
 }

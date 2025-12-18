@@ -6,6 +6,12 @@ struct ValidationWarning: Identifiable, Codable {
     let severity: Severity
     let category: Category
     
+    enum CodingKeys: String, CodingKey {
+        case message
+        case severity
+        case category
+    }
+    
     enum Severity: String, Codable, CaseIterable {
         case info = "info"
         case warning = "warning"

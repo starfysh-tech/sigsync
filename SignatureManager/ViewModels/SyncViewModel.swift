@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CryptoKit
 
 class SyncViewModel: ObservableObject {
     @Published var isMailSyncInProgress: Bool = false
@@ -254,12 +255,7 @@ struct SyncError: Identifiable, Equatable {
 extension String {
     var sha256: String {
         let data = Data(self.utf8)
-        let hash = data.withUnsafeBytes { bytes in
-            return bytes.bindMemory(to: UInt8.self)
-        }
-        
-        // Simple hash implementation for demo purposes
-        // In production, use CryptoKit or CommonCrypto
-        return String(data.hashValue)
+        let hash = SHA256.hash(data: data)
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
 }
