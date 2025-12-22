@@ -56,18 +56,27 @@ struct SyncSettingsView: View {
                         
                         if storageService.mailAccountCache.mailAccounts.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("No Mail accounts found")
-                                    .foregroundColor(.secondary)
-                                    .font(.caption)
-                                
-                                Button(isRefreshing ? "Refreshing..." : "Refresh Accounts") {
-                                    Task {
-                                        await refreshMailAccounts()
+                                if isRefreshing {
+                                    HStack(spacing: 8) {
+                                        ProgressView()
+                                            .scaleEffect(0.6)
+                                        Text("Discovering accounts...")
+                                            .foregroundColor(.secondary)
+                                            .font(.caption)
                                     }
+                                } else {
+                                    Text("No Mail accounts found")
+                                        .foregroundColor(.secondary)
+                                        .font(.caption)
+                                    
+                                    Button("Discover Mail Accounts") {
+                                        Task {
+                                            await refreshMailAccounts()
+                                        }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
                                 }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                                .disabled(isRefreshing)
                                 
                                 if let error = refreshError {
                                     Text(error)
@@ -165,6 +174,12 @@ struct SyncSettingsView: View {
         }
         .frame(width: 300)
         .background(Color(NSColor.controlBackgroundColor))
+        .task {
+            // Auto-discover accounts on first launch
+            if storageService.mailAccountCache.mailAccounts.isEmpty {
+                await refreshMailAccounts()
+            }
+        }
     }
     
     private func refreshMailAccounts() async {

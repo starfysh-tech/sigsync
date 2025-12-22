@@ -170,7 +170,7 @@ struct SignatureListView: View {
                                 .buttonStyle(.borderedProminent)
                                 .controlSize(.small)
                                 
-                                Button("Search for Existing") {
+                                Button("Import from Mail.app") {
                                     retryDiscovery()
                                 }
                                 .buttonStyle(.bordered)
